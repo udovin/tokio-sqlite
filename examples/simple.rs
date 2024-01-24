@@ -1,10 +1,3 @@
-# tokio-sqlite
-
-
-
-## Usage
-
-```rust
 use tokio_sqlite::{Connection, Value};
 
 struct Post {
@@ -41,8 +34,3 @@ async fn main() {
     let row = rows.next().await.unwrap().unwrap();
     assert_eq!(row.values()[0], Value::Integer(post.id.into()));
 }
-```
-
-## License
-
-tokio-sqlite is distributed under the terms of both the MIT license and the Apache 2.0 License.

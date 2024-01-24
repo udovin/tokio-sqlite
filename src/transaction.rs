@@ -109,21 +109,17 @@ impl<'a> TransactionTask<'a> {
         while let Some(cmd) = rx.blocking_recv() {
             match cmd {
                 TransactionCommand::Commit { tx } => {
-                    println!("Commit");
-                    let _ = tx.send(transaction.commit().map_err(|e| e.into()));
+                    let _ = tx.send(transaction.commit());
                     return;
                 }
                 TransactionCommand::Rollback { tx } => {
-                    println!("Rollback");
-                    let _ = tx.send(transaction.rollback().map_err(|e| e.into()));
+                    let _ = tx.send(transaction.rollback());
                     return;
                 }
                 TransactionCommand::Execute(cmd) => {
-                    println!("Execute");
                     let _ = cmd.tx.send(
                         transaction
                             .execute(&cmd.statement, params_from_iter(cmd.arguments.into_iter()))
-                            .map_err(|e| e.into())
                             .map(|rows_affected| Status {
                                 rows_affected,
                                 last_insert_id: Some(transaction.last_insert_rowid()),
@@ -134,7 +130,7 @@ impl<'a> TransactionTask<'a> {
                     let stmt = match transaction.prepare(&cmd.statement) {
                         Ok(stmt) => stmt,
                         Err(err) => {
-                            let _ = cmd.tx.send(Err(err.into()));
+                            let _ = cmd.tx.send(Err(err));
                             continue;
                         }
                     };

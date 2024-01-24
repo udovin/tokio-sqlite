@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use rusqlite::params_from_iter;
 use tokio::sync::{mpsc, oneshot};
 
@@ -72,11 +74,11 @@ impl Drop for ConnectionHandle {
 }
 
 pub(super) struct ConnectionTask {
-    path: String,
+    path: PathBuf,
 }
 
 impl ConnectionTask {
-    pub fn new(path: String) -> Self {
+    pub fn new(path: PathBuf) -> Self {
         Self { path }
     }
 
@@ -103,7 +105,6 @@ impl ConnectionTask {
                 ConnectionCommand::Execute(cmd) => {
                     let _ = cmd.tx.send(
                         conn.execute(&cmd.statement, params_from_iter(cmd.arguments.into_iter()))
-                            .map_err(|e| e.into())
                             .map(|rows_affected| Status {
                                 rows_affected,
                                 last_insert_id: Some(conn.last_insert_rowid()),
@@ -114,7 +115,7 @@ impl ConnectionTask {
                     let stmt = match conn.prepare(&cmd.statement) {
                         Ok(stmt) => stmt,
                         Err(err) => {
-                            let _ = cmd.tx.send(Err(err.into()));
+                            let _ = cmd.tx.send(Err(err));
                             continue;
                         }
                     };

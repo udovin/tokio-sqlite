@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::path::Path;
 
 use tokio::sync::oneshot;
 
@@ -27,8 +28,18 @@ impl Row {
 
 #[derive(Default, Clone)]
 pub struct Status {
-    pub rows_affected: usize,
-    pub last_insert_id: Option<i64>,
+    pub(super) rows_affected: usize,
+    pub(super) last_insert_id: Option<i64>,
+}
+
+impl Status {
+    pub fn rows_affected(&self) -> usize {
+        self.rows_affected
+    }
+
+    pub fn last_insert_id(&self) -> Option<i64> {
+        self.last_insert_id
+    }
 }
 
 pub struct Rows<'a> {
@@ -93,8 +104,8 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub async fn open(path: String) -> Result<Self, Error> {
-        let task = ConnectionTask::new(path);
+    pub async fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let task = ConnectionTask::new(path.as_ref().to_owned());
         let (tx, rx) = oneshot::channel();
         let handle = tokio::task::spawn_blocking(|| task.blocking_run(tx));
         Ok(Connection {
