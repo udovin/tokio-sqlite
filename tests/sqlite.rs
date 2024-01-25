@@ -100,4 +100,10 @@ async fn test_sqlite() {
         .unwrap();
     assert!(rows.next().await.is_none());
     drop(rows);
+    // Check query_row.
+    let row = conn
+        .query_row("SELECT * FROM test_tbl WHERE a = 1", [])
+        .await
+        .unwrap();
+    assert!(row.is_some());
 }

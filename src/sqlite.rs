@@ -26,6 +26,7 @@ impl Row {
     }
 }
 
+/// A result of executing the statement without the resulting query rows.
 #[derive(Default, Clone)]
 pub struct Status {
     pub(super) rows_affected: usize,
@@ -42,6 +43,7 @@ impl Status {
     }
 }
 
+/// An asynchronous stream of resulting query rows.
 pub struct Rows<'a> {
     handle: QueryHandle,
     _phantom: PhantomData<&'a ()>,
@@ -61,26 +63,33 @@ impl<'a> Drop for Rows<'a> {
     fn drop(&mut self) {}
 }
 
+/// An asynchronous SQLite database transaction.
 pub struct Transaction<'a> {
     tx: TransactionHandle,
     _phantom: PhantomData<&'a ()>,
 }
 
 impl<'a> Transaction<'a> {
+    /// Consumes the transaction, committing all changes made within it.
     pub async fn commit(mut self) -> Result<(), Error> {
         self.tx.commit().await
     }
 
+    /// Rolls the transaction back, discarding all changes made within it.
     pub async fn rollback(mut self) -> Result<(), Error> {
         self.tx.rollback().await
     }
 
+    /// Executes a statement that does not return the resulting rows.
+    ///
+    /// Returns an error if the query returns resulting rows.
     pub async fn execute(&mut self, statement: &str, arguments: &[Value]) -> Result<Status, Error> {
         self.tx
             .execute(statement.to_owned(), arguments.to_owned())
             .await
     }
 
+    /// Executes a statement that returns the resulting query rows.
     pub async fn query<S, A>(&mut self, statement: S, arguments: A) -> Result<Rows, Error>
     where
         S: Into<String>,
@@ -92,18 +101,43 @@ impl<'a> Transaction<'a> {
             _phantom: PhantomData,
         })
     }
+
+    /// Executes a statement that returns zero or one resulting query row.
+    ///
+    /// Returns an error if the query returns more than one row.
+    pub async fn query_row<S, A>(
+        &mut self,
+        statement: S,
+        arguments: A,
+    ) -> Result<Option<Row>, Error>
+    where
+        S: Into<String>,
+        A: Into<Vec<Value>>,
+    {
+        let mut rows = self.query(statement, arguments).await?;
+        let row = match rows.next().await {
+            Some(v) => v?,
+            None => return Ok(None),
+        };
+        if let Some(_) = rows.next().await {
+            return Err(Error::QueryReturnedNoRows);
+        }
+        Ok(Some(row))
+    }
 }
 
 impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {}
 }
 
+/// An asynchronous SQLite client.
 pub struct Connection {
     tx: Option<ConnectionHandle>,
     handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl Connection {
+    /// Opens a new connection to a SQLite database.
     pub async fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let task = ConnectionTask::new(path.as_ref().to_owned());
         let (tx, rx) = oneshot::channel();
@@ -114,6 +148,7 @@ impl Connection {
         })
     }
 
+    /// Begins new transaction.
     pub async fn transaction(&mut self) -> Result<Transaction, Error> {
         let tx = self.tx.as_mut().unwrap().transaction().await?;
         Ok(Transaction {
@@ -122,6 +157,9 @@ impl Connection {
         })
     }
 
+    /// Executes a statement that does not return the resulting rows.
+    ///
+    /// Returns an error if the query returns resulting rows.
     pub async fn execute<S, A>(&mut self, statement: S, arguments: A) -> Result<Status, Error>
     where
         S: Into<String>,
@@ -134,6 +172,7 @@ impl Connection {
             .await
     }
 
+    /// Executes a statement that returns the resulting query rows.
     pub async fn query<S, A>(&mut self, statement: S, arguments: A) -> Result<Rows, Error>
     where
         S: Into<String>,
@@ -149,6 +188,29 @@ impl Connection {
             handle,
             _phantom: PhantomData,
         })
+    }
+
+    /// Executes a statement that returns zero or one resulting query row.
+    ///
+    /// Returns an error if the query returns more than one row.
+    pub async fn query_row<S, A>(
+        &mut self,
+        statement: S,
+        arguments: A,
+    ) -> Result<Option<Row>, Error>
+    where
+        S: Into<String>,
+        A: Into<Vec<Value>>,
+    {
+        let mut rows = self.query(statement, arguments).await?;
+        let row = match rows.next().await {
+            Some(v) => v?,
+            None => return Ok(None),
+        };
+        if let Some(_) = rows.next().await {
+            return Err(Error::QueryReturnedNoRows);
+        }
+        Ok(Some(row))
     }
 }
 
