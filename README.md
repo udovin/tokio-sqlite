@@ -1,6 +1,7 @@
 # tokio-sqlite
 
-
+[![crates.io](https://img.shields.io/crates/v/tokio-sqlite.svg)](https://crates.io/crates/tokio-sqlite)
+[![codecov](https://codecov.io/gh/udovin/tokio-sqlite/graph/badge.svg?token=QCgfDbPUWH)](https://codecov.io/gh/udovin/tokio-sqlite)
 
 ## Usage
 
