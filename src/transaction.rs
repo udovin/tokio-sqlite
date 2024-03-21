@@ -15,6 +15,7 @@ enum TransactionCommand {
     },
     Execute(ExecuteCommand),
     Query(QueryCommand),
+    Shutdown,
 }
 
 pub(super) struct TransactionHandle(mpsc::Sender<TransactionCommand>);
@@ -76,7 +77,7 @@ impl TransactionHandle {
 impl Drop for TransactionHandle {
     fn drop(&mut self) {
         let _ = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(self.rollback())
+            tokio::runtime::Handle::current().block_on(self.0.send(TransactionCommand::Shutdown))
         });
     }
 }
@@ -137,6 +138,7 @@ impl<'a> TransactionTask<'a> {
                     let task = QueryTask::new(stmt, cmd.arguments);
                     task.blocking_run(cmd.tx);
                 }
+                TransactionCommand::Shutdown => return,
             }
         }
     }
