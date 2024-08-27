@@ -12,15 +12,15 @@ pub(super) struct ExecuteCommand {
 pub(super) struct QueryCommand {
     pub statement: String,
     pub arguments: Vec<Value>,
-    pub tx: oneshot::Sender<Result<QueryHandle, Error>>,
+    pub tx: oneshot::Sender<Result<QueryClient, Error>>,
 }
 
-pub(super) struct QueryHandle {
+pub(super) struct QueryClient {
     columns: Vec<String>,
     rx: mpsc::Receiver<Result<Row, Error>>,
 }
 
-impl QueryHandle {
+impl QueryClient {
     pub fn columns(&self) -> &[String] {
         &self.columns
     }
@@ -40,7 +40,7 @@ impl<'a> QueryTask<'a> {
         Self { stmt, arguments }
     }
 
-    pub fn blocking_run(mut self, handle_rx: oneshot::Sender<Result<QueryHandle, Error>>) {
+    pub fn blocking_run(mut self, handle_rx: oneshot::Sender<Result<QueryClient, Error>>) {
         let columns: Vec<_> = self
             .stmt
             .column_names()
@@ -59,7 +59,7 @@ impl<'a> QueryTask<'a> {
             }
         };
         let (tx, rx) = mpsc::channel(1);
-        if let Err(_) = handle_rx.send(Ok(QueryHandle { columns, rx })) {
+        if let Err(_) = handle_rx.send(Ok(QueryClient { columns, rx })) {
             // Drop query if nobody listens result.
             return;
         }

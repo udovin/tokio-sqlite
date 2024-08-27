@@ -5,23 +5,22 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::Error;
 
-use super::query::{ExecuteCommand, QueryCommand, QueryHandle, QueryTask};
-use super::transaction::{TransactionHandle, TransactionTask};
+use super::query::{ExecuteCommand, QueryClient, QueryCommand, QueryTask};
+use super::transaction::{TransactionClient, TransactionTask};
 use super::{Status, Value};
 
 enum ConnectionCommand {
     Transaction {
-        tx: oneshot::Sender<Result<TransactionHandle, Error>>,
+        tx: oneshot::Sender<Result<TransactionClient, Error>>,
     },
     Execute(ExecuteCommand),
     Query(QueryCommand),
-    Shutdown,
 }
 
-pub(super) struct ConnectionHandle(mpsc::Sender<ConnectionCommand>);
+pub(super) struct ConnectionClient(mpsc::Sender<ConnectionCommand>);
 
-impl ConnectionHandle {
-    pub async fn transaction(&mut self) -> Result<TransactionHandle, Error> {
+impl ConnectionClient {
+    pub async fn transaction(&mut self) -> Result<TransactionClient, Error> {
         let (tx, rx) = oneshot::channel();
         self.0
             .send(ConnectionCommand::Transaction { tx })
@@ -51,7 +50,7 @@ impl ConnectionHandle {
         &mut self,
         statement: String,
         arguments: Vec<Value>,
-    ) -> Result<QueryHandle, Error> {
+    ) -> Result<QueryClient, Error> {
         let (tx, rx) = oneshot::channel();
         self.0
             .send(ConnectionCommand::Query(QueryCommand {
@@ -65,14 +64,6 @@ impl ConnectionHandle {
     }
 }
 
-impl Drop for ConnectionHandle {
-    fn drop(&mut self) {
-        let _ = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(self.0.send(ConnectionCommand::Shutdown))
-        });
-    }
-}
-
 pub(super) struct ConnectionTask {
     path: PathBuf,
 }
@@ -82,7 +73,7 @@ impl ConnectionTask {
         Self { path }
     }
 
-    pub fn blocking_run(self, handle_rx: oneshot::Sender<Result<ConnectionHandle, Error>>) {
+    pub fn blocking_run(self, handle_rx: oneshot::Sender<Result<ConnectionClient, Error>>) {
         let mut conn = match rusqlite::Connection::open(self.path) {
             Ok(v) => v,
             Err(err) => {
@@ -91,7 +82,7 @@ impl ConnectionTask {
             }
         };
         let (tx, mut rx) = mpsc::channel(1);
-        if let Err(_) = handle_rx.send(Ok(ConnectionHandle(tx))) {
+        if let Err(_) = handle_rx.send(Ok(ConnectionClient(tx))) {
             // Drop connection if nobody listens result.
             return;
         }
@@ -100,7 +91,6 @@ impl ConnectionTask {
                 ConnectionCommand::Transaction { tx, .. } => {
                     let task = TransactionTask::new(&mut conn);
                     task.blocking_run(tx);
-                    continue;
                 }
                 ConnectionCommand::Execute(cmd) => {
                     let _ = cmd.tx.send(
@@ -122,7 +112,6 @@ impl ConnectionTask {
                     let task = QueryTask::new(stmt, cmd.arguments);
                     task.blocking_run(cmd.tx);
                 }
-                ConnectionCommand::Shutdown => return,
             }
         }
     }

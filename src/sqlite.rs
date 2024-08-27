@@ -3,9 +3,9 @@ use std::path::Path;
 
 use tokio::sync::oneshot;
 
-use super::connection::{ConnectionHandle, ConnectionTask};
-use super::query::QueryHandle;
-use super::transaction::TransactionHandle;
+use super::connection::{ConnectionClient, ConnectionTask};
+use super::query::QueryClient;
+use super::transaction::TransactionClient;
 
 pub type Error = rusqlite::Error;
 
@@ -45,17 +45,17 @@ impl Status {
 
 /// An asynchronous stream of resulting query rows.
 pub struct Rows<'a> {
-    handle: QueryHandle,
+    tx: QueryClient,
     _phantom: PhantomData<&'a ()>,
 }
 
 impl<'a> Rows<'a> {
     pub fn columns(&self) -> &[String] {
-        self.handle.columns()
+        self.tx.columns()
     }
 
     pub async fn next(&mut self) -> Option<Result<Row, Error>> {
-        self.handle.next().await
+        self.tx.next().await
     }
 }
 
@@ -65,7 +65,7 @@ impl<'a> Drop for Rows<'a> {
 
 /// An asynchronous SQLite database transaction.
 pub struct Transaction<'a> {
-    tx: TransactionHandle,
+    tx: TransactionClient,
     _phantom: PhantomData<&'a ()>,
 }
 
@@ -83,10 +83,12 @@ impl<'a> Transaction<'a> {
     /// Executes a statement that does not return the resulting rows.
     ///
     /// Returns an error if the query returns resulting rows.
-    pub async fn execute(&mut self, statement: &str, arguments: &[Value]) -> Result<Status, Error> {
-        self.tx
-            .execute(statement.to_owned(), arguments.to_owned())
-            .await
+    pub async fn execute<S, A>(&mut self, statement: S, arguments: A) -> Result<Status, Error>
+    where
+        S: Into<String>,
+        A: Into<Vec<Value>>,
+    {
+        self.tx.execute(statement.into(), arguments.into()).await
     }
 
     /// Executes a statement that returns the resulting query rows.
@@ -95,9 +97,9 @@ impl<'a> Transaction<'a> {
         S: Into<String>,
         A: Into<Vec<Value>>,
     {
-        let handle = self.tx.query(statement.into(), arguments.into()).await?;
+        let tx = self.tx.query(statement.into(), arguments.into()).await?;
         Ok(Rows {
-            handle,
+            tx,
             _phantom: PhantomData,
         })
     }
@@ -132,7 +134,7 @@ impl<'a> Drop for Transaction<'a> {
 
 /// An asynchronous SQLite client.
 pub struct Connection {
-    tx: Option<ConnectionHandle>,
+    tx: Option<ConnectionClient>,
     handle: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -178,14 +180,14 @@ impl Connection {
         S: Into<String>,
         A: Into<Vec<Value>>,
     {
-        let handle = self
+        let tx = self
             .tx
             .as_mut()
             .unwrap()
             .query(statement.into(), arguments.into())
             .await?;
         Ok(Rows {
-            handle,
+            tx,
             _phantom: PhantomData,
         })
     }
@@ -218,8 +220,8 @@ impl Drop for Connection {
     fn drop(&mut self) {
         drop(self.tx.take());
         if let Some(handle) = self.handle.take() {
-            let _ =
-                tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(handle));
+            tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(handle))
+                .unwrap();
         };
     }
 }

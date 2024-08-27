@@ -3,7 +3,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::Error;
 
-use super::query::{ExecuteCommand, QueryCommand, QueryHandle, QueryTask};
+use super::query::{ExecuteCommand, QueryClient, QueryCommand, QueryTask};
 use super::{Status, Value};
 
 enum TransactionCommand {
@@ -15,12 +15,11 @@ enum TransactionCommand {
     },
     Execute(ExecuteCommand),
     Query(QueryCommand),
-    Shutdown,
 }
 
-pub(super) struct TransactionHandle(mpsc::Sender<TransactionCommand>);
+pub(super) struct TransactionClient(mpsc::Sender<TransactionCommand>);
 
-impl TransactionHandle {
+impl TransactionClient {
     pub async fn commit(&mut self) -> Result<(), Error> {
         let (tx, rx) = oneshot::channel();
         self.0
@@ -60,7 +59,7 @@ impl TransactionHandle {
         &mut self,
         statement: String,
         arguments: Vec<Value>,
-    ) -> Result<QueryHandle, Error> {
+    ) -> Result<QueryClient, Error> {
         let (tx, rx) = oneshot::channel();
         self.0
             .send(TransactionCommand::Query(QueryCommand {
@@ -74,14 +73,6 @@ impl TransactionHandle {
     }
 }
 
-impl Drop for TransactionHandle {
-    fn drop(&mut self) {
-        let _ = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(self.0.send(TransactionCommand::Shutdown))
-        });
-    }
-}
-
 pub(super) struct TransactionTask<'a> {
     conn: &'a mut rusqlite::Connection,
 }
@@ -91,7 +82,7 @@ impl<'a> TransactionTask<'a> {
         Self { conn }
     }
 
-    pub fn blocking_run(self, handle_rx: oneshot::Sender<Result<TransactionHandle, Error>>) {
+    pub fn blocking_run(self, handle_rx: oneshot::Sender<Result<TransactionClient, Error>>) {
         let transaction = match self
             .conn
             .transaction_with_behavior(rusqlite::TransactionBehavior::Deferred)
@@ -103,7 +94,7 @@ impl<'a> TransactionTask<'a> {
             }
         };
         let (tx, mut rx) = mpsc::channel(1);
-        if let Err(_) = handle_rx.send(Ok(TransactionHandle(tx))) {
+        if let Err(_) = handle_rx.send(Ok(TransactionClient(tx))) {
             // Drop transaction if nobody listens result.
             return;
         }
@@ -138,7 +129,6 @@ impl<'a> TransactionTask<'a> {
                     let task = QueryTask::new(stmt, cmd.arguments);
                     task.blocking_run(cmd.tx);
                 }
-                TransactionCommand::Shutdown => return,
             }
         }
     }
