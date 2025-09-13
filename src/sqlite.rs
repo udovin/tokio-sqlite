@@ -92,7 +92,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Executes a statement that returns the resulting query rows.
-    pub async fn query<S, A>(&mut self, statement: S, arguments: A) -> Result<Rows, Error>
+    pub async fn query<S, A>(&mut self, statement: S, arguments: A) -> Result<Rows<'_>, Error>
     where
         S: Into<String>,
         A: Into<Vec<Value>>,
@@ -151,7 +151,7 @@ impl Connection {
     }
 
     /// Begins new transaction.
-    pub async fn transaction(&mut self) -> Result<Transaction, Error> {
+    pub async fn transaction(&mut self) -> Result<Transaction<'_>, Error> {
         let tx = self.tx.as_mut().unwrap().transaction().await?;
         Ok(Transaction {
             tx,
@@ -175,7 +175,7 @@ impl Connection {
     }
 
     /// Executes a statement that returns the resulting query rows.
-    pub async fn query<S, A>(&mut self, statement: S, arguments: A) -> Result<Rows, Error>
+    pub async fn query<S, A>(&mut self, statement: S, arguments: A) -> Result<Rows<'_>, Error>
     where
         S: Into<String>,
         A: Into<Vec<Value>>,

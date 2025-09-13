@@ -73,6 +73,10 @@ impl TransactionClient {
     }
 }
 
+impl Drop for TransactionClient {
+    fn drop(&mut self) {}
+}
+
 pub(super) struct TransactionTask<'a> {
     conn: &'a mut rusqlite::Connection,
 }

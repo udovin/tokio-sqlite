@@ -64,6 +64,10 @@ impl ConnectionClient {
     }
 }
 
+impl Drop for ConnectionClient {
+    fn drop(&mut self) {}
+}
+
 pub(super) struct ConnectionTask {
     path: PathBuf,
 }
