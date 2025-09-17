@@ -1,6 +1,6 @@
 use tokio_sqlite::{Connection, Value};
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test]
 async fn test_sqlite() {
     let mut conn = Connection::open(":memory:").await.unwrap();
     conn.execute(

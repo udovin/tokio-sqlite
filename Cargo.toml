@@ -1,6 +1,6 @@
 [package]
 name = "tokio-sqlite"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Asynchronous SQLite client"
@@ -9,13 +9,14 @@ keywords = ["async", "sqlite", "sql", "tokio"]
 categories = ["database"]
 
 [dependencies]
-rusqlite = "0.30.0"
-tokio = { version = "1.35.1", features = ["sync", "rt-multi-thread"] }
+rusqlite = "0.37"
+tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
-tokio = { version = "1.35.1", features = ["macros"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [features]
 bundled = ["rusqlite/bundled"]
 bundled-sqlcipher = ["rusqlite/bundled-sqlcipher"]
 sqlcipher = ["rusqlite/sqlcipher"]
+rt-multi-thread = ["tokio/rt-multi-thread"]

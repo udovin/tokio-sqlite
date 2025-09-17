@@ -135,7 +135,10 @@ impl<'a> Drop for Transaction<'a> {
 /// An asynchronous SQLite client.
 pub struct Connection {
     tx: Option<ConnectionClient>,
+    #[cfg(feature = "rt-multi-thread")]
     handle: Option<tokio::task::JoinHandle<()>>,
+    #[cfg(not(feature = "rt-multi-thread"))]
+    handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Connection {
@@ -143,7 +146,10 @@ impl Connection {
     pub async fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let task = ConnectionTask::new(path.as_ref().to_owned());
         let (tx, rx) = oneshot::channel();
+        #[cfg(feature = "rt-multi-thread")]
         let handle = tokio::task::spawn_blocking(|| task.blocking_run(tx));
+        #[cfg(not(feature = "rt-multi-thread"))]
+        let handle = std::thread::spawn(|| task.blocking_run(tx));
         Ok(Connection {
             tx: Some(rx.await.unwrap()?),
             handle: Some(handle),
@@ -153,7 +159,10 @@ impl Connection {
     pub async fn close(mut self) {
         drop(self.tx.take());
         if let Some(handle) = self.handle.take() {
+            #[cfg(feature = "rt-multi-thread")]
             handle.await.unwrap();
+            #[cfg(not(feature = "rt-multi-thread"))]
+            handle.join().unwrap();
         };
     }
 
@@ -224,5 +233,7 @@ impl Connection {
 }
 
 impl Drop for Connection {
-    fn drop(&mut self) {}
+    fn drop(&mut self) {
+        drop(self.tx.take());
+    }
 }
