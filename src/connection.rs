@@ -97,13 +97,13 @@ impl ConnectionTask {
                     task.blocking_run(tx);
                 }
                 ConnectionCommand::Execute(cmd) => {
-                    let _ = cmd.tx.send(
-                        conn.execute(&cmd.statement, params_from_iter(cmd.arguments.into_iter()))
-                            .map(|rows_affected| Status {
-                                rows_affected,
-                                last_insert_id: Some(conn.last_insert_rowid()),
-                            }),
-                    );
+                    let result = conn
+                        .execute(&cmd.statement, params_from_iter(cmd.arguments.into_iter()))
+                        .map(|rows_affected| Status {
+                            rows_affected,
+                            last_insert_id: Some(conn.last_insert_rowid()),
+                        });
+                    let _ = cmd.tx.send(result);
                 }
                 ConnectionCommand::Query(cmd) => {
                     let stmt = match conn.prepare(&cmd.statement) {

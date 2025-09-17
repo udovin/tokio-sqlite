@@ -27,7 +27,7 @@ impl Row {
 }
 
 /// A result of executing the statement without the resulting query rows.
-#[derive(Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Status {
     pub(super) rows_affected: usize,
     pub(super) last_insert_id: Option<i64>,
@@ -150,6 +150,13 @@ impl Connection {
         })
     }
 
+    pub async fn close(mut self) {
+        drop(self.tx.take());
+        if let Some(handle) = self.handle.take() {
+            handle.await.unwrap();
+        };
+    }
+
     /// Begins new transaction.
     pub async fn transaction(&mut self) -> Result<Transaction<'_>, Error> {
         let tx = self.tx.as_mut().unwrap().transaction().await?;
@@ -217,11 +224,5 @@ impl Connection {
 }
 
 impl Drop for Connection {
-    fn drop(&mut self) {
-        drop(self.tx.take());
-        if let Some(handle) = self.handle.take() {
-            tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(handle))
-                .unwrap();
-        };
-    }
+    fn drop(&mut self) {}
 }

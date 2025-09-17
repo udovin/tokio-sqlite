@@ -106,4 +106,6 @@ async fn test_sqlite() {
         .await
         .unwrap();
     assert!(row.is_some());
+    // Close connection.
+    conn.close().await;
 }
